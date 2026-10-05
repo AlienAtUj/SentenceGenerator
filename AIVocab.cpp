@@ -492,16 +492,19 @@ public:
             if (pos == "VERB" && !last_subject.empty()) {
                 word = conjugateVerb(word, last_subject);
             }
-            else if (pos == "DET" && i + 1 < pattern.posSeq.size()) {
-                last_article = word;
-                continue;
-            }
-            else if (!last_article.empty()) {
-                word = correctArticle(last_article, word);
+            // Handle determiners correctly to avoid them ending up at the end due to skipping
+            if (!last_article.empty()) {
+                // If we had a determiner from a previous step, we process it now
+                string fixed_article = correctArticle(last_article, word);
+                words.push_back(fixed_article);
                 last_article.clear();
             }
 
-            // === ADD THIS NEW LINE ===
+            if (pos == "DET" && i + 1 < pattern.posSeq.size()) {
+                last_article = word;
+                continue;
+            }
+
             // Apply pronoun case correction
             if (pos == "PRON" && semantic_role == "S") {
                 word = correctPronounCase(word, semantic_role);
@@ -515,12 +518,20 @@ public:
             words.push_back(word);
         }
 
-        // Handle case where article was last word
+        // Handle case where article was last word (shouldn't happen with good patterns, but just in case)
         if (!last_article.empty()) {
-            words.push_back("a");
+            words.push_back(last_article);
         }
 
-        // === ADD THIS CHECK ===
+        // Remove empty strings from words
+        vector<string> clean_words;
+        for (const string& w : words) {
+            if (!w.empty() && w != " ") {
+                clean_words.push_back(w);
+            }
+        }
+        words = clean_words;
+
         // If sentence makes semantic sense, use it
         if (makesSemanticSense(words, pattern.posSeq)) {
             break;
@@ -670,20 +681,34 @@ private:
        bool makesSemanticSense(const vector<string>& words, const vector<string>& pos_tags) {
     if (words.size() < 2) return false;
 
+    // Use the actual last word to check semantics instead of pos_tags,
+    // since words array might have a different length or misalignment due to DET handling
+    string last_word = toLower(words.back());
+
     // Don't end with prepositions or determiners
-    if (pos_tags.back() == "PREP" || pos_tags.back() == "DET") return false;
+    static unordered_set<string> bad_endings = {
+        "in", "on", "at", "by", "with", "about", "against", "between", "into", "through", "during", "before", "after", "above", "below", "from", "to", "of", "for",
+        "the", "a", "an", "this", "that", "these", "those", "some", "any", "all", "every", "each"
+    };
+    if (bad_endings.count(last_word)) return false;
 
     // Don't end with dependent possessive pronouns
     static unordered_set<string> dependentPossessives = {"my", "your", "his", "her", "our", "their", "its"};
-    if (pos_tags.back() == "PRON" && dependentPossessives.count(toLower(words.back()))) {
+    if (dependentPossessives.count(last_word)) {
+        return false;
+    }
+
+    // Don't start with dependent possessive pronouns if followed by VERB (e.g. "My runs")
+    string first_word = toLower(words[0]);
+    if (dependentPossessives.count(first_word) && pos_tags.size() > 1 && pos_tags[1] == "VERB") {
         return false;
     }
 
     // Check for basic subject-verb agreement issues
     for (size_t i = 0; i < words.size() - 1; i++) {
         if (pos_tags[i] == "PRON" && pos_tags[i+1] == "VERB") {
-            string subject = words[i];
-            string verb = words[i+1];
+            string subject = toLower(words[i]);
+            string verb = toLower(words[i+1]);
 
             // Basic agreement checks
             if ((subject == "I" && verb == "are") ||
