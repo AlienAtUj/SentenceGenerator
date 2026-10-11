@@ -1,0 +1,26 @@
+            // Apply English polish rules
+            if (pos == "VERB" && !last_subject.empty()) {
+                word = conjugateVerb(word, last_subject);
+            }
+            else if (pos == "DET" && i + 1 < pattern.posSeq.size()) {
+                last_article = word;
+                continue;
+            }
+            else if (!last_article.empty()) {
+                word = correctArticle(last_article, word);
+                last_article.clear();
+            }
+
+            // === ADD THIS NEW LINE ===
+            // Apply pronoun case correction
+            if (pos == "PRON" && semantic_role == "S") {
+                word = correctPronounCase(word, semantic_role);
+            }
+
+            // Remember subject for verb conjugation
+            if (semantic_role == "S" || (pos == "PRON" && i == 0)) {
+                last_subject = word;
+            }
+
+            words.push_back(word);
+        }
