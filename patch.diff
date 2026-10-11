@@ -1,0 +1,23 @@
+--- AIVocab.cpp
++++ AIVocab.cpp
+@@ -470,12 +470,14 @@
+             if (pos == "VERB" && !last_subject.empty()) {
+                 word = conjugateVerb(word, last_subject);
+             }
+-            else if (pos == "DET" && i + 1 < pattern.posSeq.size()) {
++
++            if (!last_article.empty()) {
++                words.push_back(correctArticle(last_article, word));
++                last_article.clear();
++            }
++
++            if (pos == "DET" && i + 1 < pattern.posSeq.size()) {
+                 last_article = word;
+                 continue;
+             }
+-            else if (!last_article.empty()) {
+-                word = correctArticle(last_article, word);
+-                last_article.clear();
+-            }
+
+             // === ADD THIS NEW LINE ===
