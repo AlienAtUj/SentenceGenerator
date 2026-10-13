@@ -532,8 +532,22 @@ public:
         }
         words = clean_words;
 
+        // Check for double determiners or prepositions (e.g. "at the the")
+        bool has_double_bad_words = false;
+        static unordered_set<string> bad_endings = {
+            "in", "on", "at", "by", "with", "about", "against", "between", "into", "through", "during", "before", "after", "above", "below", "from", "to", "of", "for",
+            "the", "a", "an", "this", "that", "these", "those", "some", "any", "all", "every", "each",
+            "my", "your", "his", "her", "our", "their", "its"
+        };
+        for (size_t i = 1; i < words.size(); i++) {
+            if (bad_endings.count(toLower(words[i-1])) && bad_endings.count(toLower(words[i]))) {
+                has_double_bad_words = true;
+                break;
+            }
+        }
+
         // If sentence makes semantic sense, use it
-        if (makesSemanticSense(words, pattern.posSeq)) {
+        if (!has_double_bad_words && makesSemanticSense(words, pattern.posSeq)) {
             break;
         }
         // Otherwise try again (we'll loop up to 3 times)
@@ -1153,7 +1167,8 @@ void learnPatternsFromSentence(const vector<string>& words, const vector<string>
             {"PREP", {"in", "on", "at", "by", "with", "about", "against", "between", "into", "through", "during", "before", "after", "above", "below", "from", "to", "of", "for"}},
             {"CONJ", {"and", "but", "or", "so", "yet", "for", "nor", "because", "although", "while", "when", "where", "if", "unless", "until"}},
             {"PROPN", {"John", "Mary", "London", "Paris", "Google", "Microsoft", "Alice", "Bob", "English", "Monday", "January", "Christmas"}},
-            {"NUM", {"one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "first", "second", "third", "last", "next"}}
+            {"NUM", {"one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "first", "second", "third", "last", "next"}},
+            {"CAN", {"can", "could", "will", "would", "shall", "should", "may", "might", "must"}}
             };
 
             if (commonWords.count(pos)) {
