@@ -19,6 +19,9 @@ static const double MIN_PATTERN_CONFIDENCE = 0.85;
 static const size_t EMBEDDING_DIM = 384;
 static const size_t MAX_SEQUENCE_LENGTH = 512;
 
+// -------------------- Global State --------------------
+static bool API_MODE = false;
+
 // -------------------- Basic Data Structures --------------------
 struct Token {
     string surface;
@@ -446,7 +449,7 @@ public:
 
         while (getline(in, line)) {
             line_count++;
-            if (line_count % 10000 == 0) {
+            if (!API_MODE && line_count % 10000 == 0) {
                 cout << "Processed " << line_count << " lines, Patterns: " << patterns.size() << endl;
             }
 
@@ -460,7 +463,7 @@ public:
         in.close();
         finalizePatternInduction();
         computeAdvancedWeights();
-        cout << "Learning complete. Patterns: " << patterns.size() << endl;
+        if (!API_MODE) cout << "Learning complete. Patterns: " << patterns.size() << endl;
     }
 
     string generateSentence() {
@@ -532,7 +535,9 @@ public:
         }
         words = clean_words;
 
-        // Check for double determiners or prepositions (e.g. "at the the")
+        // Check for double determiners or prepositions (e.g. "the the")
+        // "in the" is fine, but "the the" is bad. So we only flag exact matches
+        // or double prepositions / double determiners if they are the exact same word.
         bool has_double_bad_words = false;
         static unordered_set<string> bad_endings = {
             "in", "on", "at", "by", "with", "about", "against", "between", "into", "through", "during", "before", "after", "above", "below", "from", "to", "of", "for",
@@ -541,8 +546,10 @@ public:
         };
         for (size_t i = 1; i < words.size(); i++) {
             if (bad_endings.count(toLower(words[i-1])) && bad_endings.count(toLower(words[i]))) {
-                has_double_bad_words = true;
-                break;
+                if (toLower(words[i-1]) == toLower(words[i])) {
+                    has_double_bad_words = true;
+                    break;
+                }
             }
         }
 
@@ -907,7 +914,7 @@ private:
                 }
 
                 patterns[key] = newPattern;
-                cout << "Added base pattern: " << key << " (" << example << ")" << endl;
+                if (!API_MODE) cout << "Added base pattern: " << key << " (" << example << ")" << endl;
             }
         }
     }
@@ -1332,7 +1339,31 @@ void learnPatternsFromSentence(const vector<string>& words, const vector<string>
     string formatSentence(const vector<string>& words) {
     if (words.empty()) return "";
 
-    string sentence = join(words, " ");
+    vector<string> clean_words;
+    for (const string& w : words) {
+        if (!w.empty() && w != " ") {
+            clean_words.push_back(w);
+        }
+    }
+
+    static unordered_set<string> bad_endings = {
+        "in", "on", "at", "by", "with", "about", "against", "between", "into", "through", "during", "before", "after", "above", "below", "from", "to", "of", "for",
+        "the", "a", "an", "this", "that", "these", "those", "some", "any", "all", "every", "each",
+        "my", "your", "his", "her", "our", "their", "its", ".", ",", "?", "!"
+    };
+
+    while (!clean_words.empty() && bad_endings.count(toLower(clean_words.back()))) {
+        clean_words.pop_back();
+    }
+
+    if (clean_words.empty()) return "";
+
+    string sentence = join(clean_words, " ");
+
+    // Trim trailing space if any
+    while (!sentence.empty() && sentence.back() == ' ') {
+        sentence.pop_back();
+    }
 
     // Capitalize first letter
     if (!sentence.empty()) {
@@ -1340,11 +1371,11 @@ void learnPatternsFromSentence(const vector<string>& words, const vector<string>
     }
 
     // Add proper ending punctuation
-    if (sentence.back() != '.' && sentence.back() != '?' && sentence.back() != '!') {
+    if (!sentence.empty() && sentence.back() != '.' && sentence.back() != '?' && sentence.back() != '!') {
         // Determine if it's a question
         bool is_question = false;
         static unordered_set<string> question_words = {"what", "who", "where", "when", "why", "how", "which", "can", "will", "do", "does", "is", "are"};
-        if (!words.empty() && question_words.count(toLower(words[0]))) {
+        if (!clean_words.empty() && question_words.count(toLower(clean_words[0]))) {
             is_question = true;
         }
 
@@ -1362,13 +1393,18 @@ int main() {
     srand(static_cast<unsigned>(time(nullptr)));
 
     EnhancedPatternModel model;
-    cout << "=== Advanced PatternLearner v3 ===" << endl;
-    cout << "Features: Neural POS tagging, Semantic Role Labeling, Dependency Parsing" << endl;
+
+    if (!API_MODE) {
+        cout << "=== Advanced PatternLearner v3 ===" << endl;
+        cout << "Features: Neural POS tagging, Semantic Role Labeling, Dependency Parsing" << endl;
+    }
 
     string line;
     while (true) {
-        cout << "\nCommands: read <file>, gen, interp <sentence>, patterns [N], vocab [N], save <path>, load <path>, exit" << endl;
-        cout << "> ";
+        if (!API_MODE) {
+            cout << "\nCommands: read <file>, gen, batch <num> <file.csv>, seed <N>, interp <text>, patterns [N], vocab [N], save <path>, load <path>, api, exit" << endl;
+            cout << "> ";
+        }
 
         if (!getline(cin, line)) break;
         if (line.empty()) continue;
@@ -1378,31 +1414,68 @@ int main() {
         ss >> cmd;
 
         if (cmd == "exit") break;
+        else if (cmd == "api") {
+            API_MODE = !API_MODE;
+            if (!API_MODE) cout << "API Mode Disabled. Verbose logging restored." << endl;
+        }
+        else if (cmd == "seed") {
+            unsigned int seed_val;
+            if (ss >> seed_val) {
+                srand(seed_val);
+                if (!API_MODE) cout << "Random seed set to " << seed_val << endl;
+            } else {
+                if (!API_MODE) cout << "Usage: seed <integer>" << endl;
+            }
+        }
+        else if (cmd == "batch") {
+            size_t n = 0;
+            string path;
+            if (ss >> n >> path) {
+                ofstream out(path);
+                if (!out) {
+                    if (!API_MODE) cout << "Cannot open file: " << path << endl;
+                    continue;
+                }
+                out << "id,sentence\n";
+                for (size_t i = 0; i < n; i++) {
+                    out << (i+1) << ",\"" << model.generateSentence() << "\"\n";
+                }
+                out.close();
+                if (!API_MODE) cout << "Successfully wrote " << n << " synthetic sentences to " << path << endl;
+            } else {
+                if (!API_MODE) cout << "Usage: batch <number> <filename.csv>" << endl;
+            }
+        }
         else if (cmd == "read") {
             string file;
             ss >> file;
             if (file.empty()) {
-                cout << "Usage: read <filename>" << endl;
+                if (!API_MODE) cout << "Usage: read <filename>" << endl;
                 continue;
             }
-            cout << "Learning from: " << file << "..." << endl;
+            if (!API_MODE) cout << "Learning from: " << file << "..." << endl;
             model.learnFromFile(file);
         }
         else if (cmd == "gen") {
-            cout << "Generated: " << model.generateSentence() << endl;
+            if (API_MODE) {
+                cout << model.generateSentence() << endl;
+            } else {
+                cout << "Generated: " << model.generateSentence() << endl;
+            }
         }
         else if (cmd == "interp") {
             string sentence;
             getline(ss, sentence);
             if (sentence.empty()) {
-                cout << "Usage: interp <sentence>" << endl;
+                if (!API_MODE) cout << "Usage: interp <sentence>" << endl;
                 continue;
             }
             // Remove leading space if present
             if (!sentence.empty() && sentence[0] == ' ') {
                 sentence = sentence.substr(1);
             }
-            cout << "Interpretation: " << model.interpret(sentence) << endl;
+            if (API_MODE) cout << model.interpret(sentence) << endl;
+            else cout << "Interpretation: " << model.interpret(sentence) << endl;
         }
         else if (cmd == "patterns") {
             size_t n = 10;
@@ -1418,33 +1491,33 @@ int main() {
             string path;
             ss >> path;
             if (path.empty()) {
-                cout << "Usage: save <filename>" << endl;
+                if (!API_MODE) cout << "Usage: save <filename>" << endl;
                 continue;
             }
             if (model.saveModel(path)) {
-                cout << "Model saved to: " << path << endl;
+                if (!API_MODE) cout << "Model saved to: " << path << endl;
             } else {
-                cout << "Save failed" << endl;
+                if (!API_MODE) cout << "Save failed" << endl;
             }
         }
         else if (cmd == "load") {
             string path;
             ss >> path;
             if (path.empty()) {
-                cout << "Usage: load <filename>" << endl;
+                if (!API_MODE) cout << "Usage: load <filename>" << endl;
                 continue;
             }
             if (model.loadModel(path)) {
-                cout << "Model loaded from: " << path << endl;
+                if (!API_MODE) cout << "Model loaded from: " << path << endl;
             } else {
-                cout << "Load failed" << endl;
+                if (!API_MODE) cout << "Load failed" << endl;
             }
         }
         else {
-            cout << "Unknown command: " << cmd << endl;
+            if (!API_MODE) cout << "Unknown command: " << cmd << endl;
         }
     }
 
-    cout << "Goodbye!" << endl;
+    if (!API_MODE) cout << "Goodbye!" << endl;
     return 0;
 }

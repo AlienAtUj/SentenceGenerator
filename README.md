@@ -29,7 +29,10 @@ This will launch an interactive CLI.
 
 ### Commands:
 
-- `read <file>`: Reads a text file (like `basic.txt`) and organicly learns patterns, morphology, and POS sequences.
+- `read <file>`: Reads a text file (like `basic.txt`) and organically learns patterns, morphology, and POS sequences.
+- `batch <number> <filename.csv>`: Automatically streams `<number>` sentences to a CSV file.
+- `seed <N>`: Sets the random seed for reproducible outputs.
+- `api`: Toggles API mode to suppress verbose logging.
 - `gen`: Generates a coherent sentence based on the learned patterns and vocabulary.
 - `interp <sentence>`: Interprets a user-provided sentence and prints the identified grammar pattern mapping.
 - `patterns [N]`: Prints the top `N` highest-confidence grammatical patterns extracted.
@@ -41,3 +44,12 @@ This will launch an interactive CLI.
 ## Theory
 
 AIVocab is grounded in **Quantum Pattern Learning with Logical Circle Theory**. Instead of massive memorization protocols reliant on brute force (e.g. millions of text pairs), this AI extracts core structural mappings (Algebraic, Relational, Transformation patterns). By defining foundational circle pathways (like `I love pizza -> Subject-Verb-Object`), the model can complete the structural circle and substitute out parts of speech infinitely with extremely high efficiency data improvements (upwards of a 1000x data reduction).
+
+### Edge and IoT Mode
+If compiling for low-memory microcontrollers or running as a silent text engine, you can toggle API Mode:
+- `api`: Suppresses all verbose log output (e.g. `Learning complete...`, `Generated:` tags) allowing standard out to pipe directly to C/Python bridges cleanly.
+
+### Synthetic Data Generation
+For machine learning pipelines, AIVocab provides deterministic mass generation functionality.
+- `seed <N>`: Forces the random engine to use `<N>` to provide perfectly reproducible datasets.
+- `batch <number> <filename.csv>`: Automatically streams `<number>` organic sentences to a structured CSV file without overloading memory.
