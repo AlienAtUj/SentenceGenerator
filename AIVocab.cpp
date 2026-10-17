@@ -203,8 +203,8 @@ private:
     void seedComprehensiveIrregulars() {
         vector<pair<string, string>> irregular_verbs = {
             {"went", "go"}, {"gone", "go"}, {"ate", "eat"}, {"eaten", "eat"},
-            {"saw", "see"}, {"seen", "see"}, {"was", "be"}, {"were", "be"}, {"been", "be"},
-            {"did", "do"}, {"done", "do"}, {"had", "have"}, {"has", "have"}, {"having", "have"},
+            {"saw", "see"}, {"seen", "see"}, {"was", "be"}, {"were", "be"}, {"been", "be"}, {"is", "be"}, {"am", "be"}, {"are", "be"},
+            {"did", "do"}, {"done", "do"}, {"does", "do"}, {"had", "have"}, {"has", "have"}, {"having", "have"},
             {"made", "make"}, {"making", "make"}, {"took", "take"}, {"taken", "take"},
             {"came", "come"}, {"coming", "come"}, {"got", "get"}, {"getting", "get"},
             {"gave", "give"}, {"given", "give"}, {"found", "find"}, {"finding", "find"},
@@ -474,7 +474,7 @@ public:
     string last_article = "";
     
     // Try up to 3 times to generate a good sentence
-    for (int attempt = 0; attempt < 3; attempt++) {
+    for (int attempt = 0; attempt < 10; attempt++) {
         words.clear();
         last_subject = "";
         last_article = "";
@@ -502,7 +502,7 @@ public:
             
             // === ADD THIS NEW LINE ===
             // Apply pronoun case correction
-            if (pos == "PRON" && semantic_role == "S") {
+            if (pos == "PRON" && (semantic_role == "S" || semantic_role == "O")) {
                 word = correctPronounCase(word, semantic_role);
             }
             
@@ -659,9 +659,13 @@ private:
 
     string correctPronounCase(const string& pronoun, const string& grammaticalRole) {
         static unordered_map<string, string> subject_forms = {{"me", "I"}, {"him", "he"}, {"her", "she"}, {"us", "we"}, {"them", "they"}};
+        static unordered_map<string, string> object_forms = {{"I", "me"}, {"he", "him"}, {"she", "her"}, {"we", "us"}, {"they", "them"}, {"his", "him"}};
         
         if (grammaticalRole == "S" && subject_forms.count(pronoun)) {
             return subject_forms[pronoun];
+        }
+        if (grammaticalRole == "O" && object_forms.count(pronoun)) {
+            return object_forms[pronoun];
         }
         return pronoun;
     }
@@ -675,13 +679,17 @@ private:
     // Check for basic subject-verb agreement issues
     for (size_t i = 0; i < words.size() - 1; i++) {
         if (pos_tags[i] == "PRON" && pos_tags[i+1] == "VERB") {
-            string subject = words[i];
+            string subject = toLower(words[i]);
             string verb = words[i+1];
             
             // Basic agreement checks
-            if ((subject == "I" && verb == "are") || 
+            if ((subject == "i" && verb == "are") ||
                 (subject == "he" && verb == "are") ||
-                (subject == "she" && verb == "are")) {
+                (subject == "she" && verb == "are") ||
+                (subject == "it" && verb == "are") ||
+                (subject == "we" && verb == "is") ||
+                (subject == "they" && verb == "is") ||
+                (subject == "you" && verb == "is")) {
                 return false;
             }
         }
@@ -693,15 +701,15 @@ private:
    string conjugateVerb(const string& baseVerb, const string& subject, const string& tense = "present") {
     // Handle common irregular verbs
     static unordered_map<string, unordered_map<string, string>> irregularVerbs = {
-        {"be", {{"I", "am"}, {"you", "are"}, {"he", "is"}, {"she", "is"}, {"it", "is"}, {"we", "are"}, {"they", "are"}, 
+        {"be", {{"i", "am"}, {"you", "are"}, {"he", "is"}, {"she", "is"}, {"it", "is"}, {"we", "are"}, {"they", "are"},
                 {"my", "is"}, {"your", "is"}, {"his", "is"}, {"her", "is"}, {"our", "is"}, {"their", "is"}, {"this", "is"}, {"that", "is"}}},
-        {"have", {{"I", "have"}, {"you", "have"}, {"he", "has"}, {"she", "has"}, {"it", "has"}, {"we", "have"}, {"they", "have"}}},
-        {"do", {{"I", "do"}, {"you", "do"}, {"he", "does"}, {"she", "does"}, {"it", "does"}, {"we", "do"}, {"they", "do"}}},
-        {"go", {{"I", "go"}, {"you", "go"}, {"he", "goes"}, {"she", "goes"}, {"it", "goes"}, {"we", "go"}, {"they", "go"}}},
-        {"say", {{"I", "say"}, {"you", "say"}, {"he", "says"}, {"she", "says"}, {"it", "says"}, {"we", "say"}, {"they", "say"}}},
-        {"make", {{"I", "make"}, {"you", "make"}, {"he", "makes"}, {"she", "makes"}, {"it", "makes"}, {"we", "make"}, {"they", "make"}}},
-        {"take", {{"I", "take"}, {"you", "take"}, {"he", "takes"}, {"she", "takes"}, {"it", "takes"}, {"we", "take"}, {"they", "take"}}},
-        {"come", {{"I", "come"}, {"you", "come"}, {"he", "comes"}, {"she", "comes"}, {"it", "comes"}, {"we", "come"}, {"they", "come"}}}
+        {"have", {{"i", "have"}, {"you", "have"}, {"he", "has"}, {"she", "has"}, {"it", "has"}, {"we", "have"}, {"they", "have"}}},
+        {"do", {{"i", "do"}, {"you", "do"}, {"he", "does"}, {"she", "does"}, {"it", "does"}, {"we", "do"}, {"they", "do"}}},
+        {"go", {{"i", "go"}, {"you", "go"}, {"he", "goes"}, {"she", "goes"}, {"it", "goes"}, {"we", "go"}, {"they", "go"}}},
+        {"say", {{"i", "say"}, {"you", "say"}, {"he", "says"}, {"she", "says"}, {"it", "says"}, {"we", "say"}, {"they", "say"}}},
+        {"make", {{"i", "make"}, {"you", "make"}, {"he", "makes"}, {"she", "makes"}, {"it", "makes"}, {"we", "make"}, {"they", "make"}}},
+        {"take", {{"i", "take"}, {"you", "take"}, {"he", "takes"}, {"she", "takes"}, {"it", "takes"}, {"we", "take"}, {"they", "take"}}},
+        {"come", {{"i", "come"}, {"you", "come"}, {"he", "comes"}, {"she", "comes"}, {"it", "comes"}, {"we", "come"}, {"they", "come"}}}
     };
     
     // Handle past tense irregulars
@@ -719,8 +727,9 @@ private:
     }
     
     // Check irregular verbs first
-    if (irregularVerbs.count(verb) && irregularVerbs[verb].count(subject)) {
-        return irregularVerbs[verb][subject];
+    string lower_subject = toLower(subject);
+    if (irregularVerbs.count(verb) && irregularVerbs[verb].count(lower_subject)) {
+        return irregularVerbs[verb][lower_subject];
     }
     
     // Regular verb conjugation for third person singular
@@ -728,7 +737,7 @@ private:
         "he", "she", "it", "his", "her", "its", "my", "your", "our", "their", "this", "that"
     };
     
-    if (thirdPersonSingular.count(subject)) {
+    if (thirdPersonSingular.count(lower_subject)) {
         // Add 's' for third person singular (present tense)
         if (tense == "present") {
             if (verb == "have") return "has";
@@ -1098,7 +1107,7 @@ void learnPatternsFromSentence(const vector<string>& words, const vector<string>
         if (it == pos_to_words.end() || it->second.empty()) {
             static const unordered_map<string, vector<string>> commonWords = {
             {"NOUN", {"time", "person", "year", "way", "day", "thing", "man", "world", "life", "hand", "house", "car", "book", "water", "food", "friend", "school", "work", "home", "city", "dog", "cat", "child", "student", "teacher"}},
-            {"VERB", {"is", "are", "was", "were", "have", "has", "do", "does", "say", "said", "get", "got", "make", "made", "go", "went", "know", "see", "come", "think", "look", "want", "give", "take", "find", "tell", "work", "call", "walk", "run", "eat", "drink", "sleep", "read", "write"}},
+            {"VERB", {"be", "have", "do", "say", "get", "make", "go", "know", "see", "come", "think", "look", "want", "give", "take", "find", "tell", "work", "call", "walk", "run", "eat", "drink", "sleep", "read", "write"}},
             {"ADJ", {"good", "new", "first", "last", "long", "great", "little", "own", "other", "old", "big", "small", "young", "important", "beautiful", "happy", "sad", "strong", "weak", "smart", "red", "blue", "green", "hot", "cold"}},
             {"ADV", {"up", "so", "out", "just", "now", "then", "more", "also", "here", "there", "very", "well", "too", "always", "never", "sometimes", "quickly", "slowly", "carefully", "happily", "today", "yesterday", "soon", "often"}},
             {"PRON", {"I", "you", "he", "she", "it", "we", "they", "me", "him", "her", "us", "them", "my", "your", "his", "our", "their", "this", "that", "these"}},
