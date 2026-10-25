@@ -70,87 +70,89 @@ static vector<string> split(const string &s, char delim) {
     return out; 
 }
 
-// -------------------- Neural Network Components --------------------
-class TransformerPOSModel {
+// -------------------- Rule-Based POS Tagger --------------------
+class RuleBasedPOSTagger {
 private:
-    unordered_map<string, vector<float>> word_embeddings;
-    unordered_map<string, vector<float>> pos_embeddings;
-    
+    unordered_map<string, string> dict;
+
 public:
-    TransformerPOSModel() { loadPretrainedEmbeddings(); }
-    
-    string predict(const string& word, const vector<string>& context) {
-        vector<float> embedding = getContextualEmbedding(word, context);
-        return attentionClassification(embedding);
-    }
-    
-    vector<float> getWordEmbedding(const string& word) {
-        string clean_word = toLower(word);
-        if (word_embeddings.count(clean_word)) {
-            return word_embeddings[clean_word];
-        }
-        vector<float> avg_embedding(EMBEDDING_DIM, 0.0f);
-        for (const auto& kv : word_embeddings) {
-            for (size_t i = 0; i < EMBEDDING_DIM; i++) {
-                avg_embedding[i] += kv.second[i];
-            }
-        }
-        for (size_t i = 0; i < EMBEDDING_DIM; i++) {
-            avg_embedding[i] /= word_embeddings.size();
-        }
-        return avg_embedding;
+    RuleBasedPOSTagger() {
+        vector<pair<string, string>> noun_list = {
+            {"time", "NOUN"}, {"person", "NOUN"}, {"year", "NOUN"}, {"way", "NOUN"}, {"day", "NOUN"}, {"thing", "NOUN"}, {"man", "NOUN"}, {"world", "NOUN"}, {"life", "NOUN"}, {"hand", "NOUN"}, {"part", "NOUN"}, {"child", "NOUN"}, {"eye", "NOUN"}, {"woman", "NOUN"}, {"place", "NOUN"}, {"work", "NOUN"}, {"week", "NOUN"}, {"case", "NOUN"}, {"point", "NOUN"}, {"government", "NOUN"}, {"company", "NOUN"}, {"number", "NOUN"}, {"group", "NOUN"}, {"problem", "NOUN"}, {"fact", "NOUN"},
+            {"sun", "NOUN"}, {"east", "NOUN"}, {"books", "NOUN"}, {"school", "NOUN"}, {"friends", "NOUN"}, {"company", "NOUN"}, {"downtown", "NOUN"}, {"soccer", "NOUN"}, {"park", "NOUN"}, {"weekends", "NOUN"}, {"dinner", "NOUN"}, {"family", "NOUN"}, {"dog", "NOUN"}, {"someone", "NOUN"}, {"door", "NOUN"}, {"cat", "NOUN"}, {"sofa", "NOUN"}, {"teacher", "NOUN"}, {"lesson", "NOUN"}, {"house", "NOUN"}, {"garden", "NOUN"}, {"languages", "NOUN"}, {"grandmother", "NOUN"}, {"tomorrow", "NOUN"}, {"book", "NOUN"}, {"television", "NOUN"}, {"night", "NOUN"}, {"homework", "NOUN"},
+            {"pizza", "NOUN"}, {"mice", "NOUN"}, {"shoes", "NOUN"}, {"students", "NOUN"}, {"store", "NOUN"}, {"teachers", "NOUN"}
+        };
+        for (const auto& p : noun_list) dict[p.first] = p.second;
+
+        vector<pair<string, string>> verb_list = {
+            {"is", "VERB"}, {"are", "VERB"}, {"was", "VERB"}, {"were", "VERB"}, {"have", "VERB"}, {"has", "VERB"}, {"had", "VERB"}, {"do", "VERB"}, {"does", "VERB"}, {"did", "VERB"}, {"say", "VERB"}, {"said", "VERB"}, {"go", "VERB"}, {"went", "VERB"}, {"get", "VERB"}, {"got", "VERB"}, {"make", "VERB"}, {"made", "VERB"}, {"know", "VERB"}, {"knew", "VERB"}, {"think", "VERB"}, {"thought", "VERB"}, {"take", "VERB"}, {"took", "VERB"}, {"see", "VERB"}, {"saw", "VERB"}, {"come", "VERB"}, {"came", "VERB"}, {"want", "VERB"}, {"look", "VERB"}, {"use", "VERB"}, {"find", "VERB"}, {"give", "VERB"}, {"tell", "VERB"}, {"work", "VERB"}, {"call", "VERB"}, {"try", "VERB"}, {"ask", "VERB"}, {"need", "VERB"}, {"feel", "VERB"}, {"become", "VERB"}, {"leave", "VERB"}, {"put", "VERB"}, {"mean", "VERB"}, {"keep", "VERB"}, {"let", "VERB"}, {"begin", "VERB"}, {"seem", "VERB"}, {"help", "VERB"}, {"talk", "VERB"}, {"turn", "VERB"}, {"start", "VERB"}, {"might", "VERB"}, {"show", "VERB"}, {"hear", "VERB"}, {"play", "VERB"}, {"run", "VERB"}, {"move", "VERB"}, {"like", "VERB"}, {"live", "VERB"}, {"believe", "VERB"}, {"hold", "VERB"}, {"bring", "VERB"}, {"happen", "VERB"}, {"must", "VERB"}, {"write", "VERB"}, {"provide", "VERB"}, {"sit", "VERB"}, {"stand", "VERB"}, {"lose", "VERB"}, {"pay", "VERB"}, {"meet", "VERB"}, {"include", "VERB"}, {"continue", "VERB"}, {"set", "VERB"}, {"learn", "VERB"}, {"change", "VERB"}, {"lead", "VERB"}, {"understand", "VERB"}, {"watch", "VERB"}, {"follow", "VERB"}, {"stop", "VERB"}, {"create", "VERB"}, {"speak", "VERB"}, {"read", "VERB"}, {"allow", "VERB"}, {"add", "VERB"}, {"spend", "VERB"}, {"grow", "VERB"}, {"open", "VERB"}, {"walk", "VERB"}, {"win", "VERB"}, {"offer", "VERB"}, {"remember", "VERB"}, {"love", "VERB"}, {"consider", "VERB"}, {"appear", "VERB"}, {"buy", "VERB"}, {"wait", "VERB"}, {"serve", "VERB"}, {"die", "VERB"}, {"send", "VERB"}, {"expect", "VERB"}, {"build", "VERB"}, {"stay", "VERB"}, {"fall", "VERB"}, {"cut", "VERB"}, {"reach", "VERB"}, {"kill", "VERB"}, {"remain", "VERB"},
+            {"rises", "VERB"}, {"walks", "VERB"}, {"works", "VERB"}, {"eat", "VERB"}, {"barks", "VERB"}, {"comes", "VERB"}, {"sleeps", "VERB"}, {"explains", "VERB"}, {"visit", "VERB"}, {"reading", "VERB"}, {"watching", "VERB"}, {"finished", "VERB"}, {"chased", "VERB"}, {"study", "VERB"}, {"barked", "VERB"}
+        };
+        for (const auto& p : verb_list) dict[p.first] = p.second;
+
+        vector<pair<string, string>> adj_list = {
+            {"good", "ADJ"}, {"new", "ADJ"}, {"first", "ADJ"}, {"last", "ADJ"}, {"long", "ADJ"}, {"great", "ADJ"}, {"little", "ADJ"}, {"own", "ADJ"}, {"other", "ADJ"}, {"old", "ADJ"}, {"right", "ADJ"}, {"big", "ADJ"}, {"high", "ADJ"}, {"different", "ADJ"}, {"small", "ADJ"}, {"large", "ADJ"}, {"next", "ADJ"}, {"early", "ADJ"}, {"young", "ADJ"}, {"important", "ADJ"}, {"few", "ADJ"}, {"public", "ADJ"}, {"bad", "ADJ"}, {"same", "ADJ"}, {"able", "ADJ"},
+            {"warm", "ADJ"}, {"beautiful", "ADJ"}, {"interesting", "ADJ"}, {"red", "ADJ"}, {"happy", "ADJ"}, {"blue", "ADJ"}
+        };
+        for (const auto& p : adj_list) dict[p.first] = p.second;
+
+        vector<pair<string, string>> adv_list = {
+            {"up", "ADV"}, {"so", "ADV"}, {"out", "ADV"}, {"just", "ADV"}, {"now", "ADV"}, {"how", "ADV"}, {"then", "ADV"}, {"more", "ADV"}, {"also", "ADV"}, {"here", "ADV"}, {"well", "ADV"}, {"only", "ADV"}, {"very", "ADV"}, {"even", "ADV"}, {"back", "ADV"}, {"there", "ADV"}, {"down", "ADV"}, {"still", "ADV"}, {"in", "ADV"}, {"as", "ADV"}, {"to", "ADV"}, {"when", "ADV"}, {"never", "ADV"}, {"really", "ADV"}, {"most", "ADV"},
+            {"every", "ADV"}, {"clearly", "ADV"}, {"fluently", "ADV"}, {"already", "ADV"}, {"hard", "ADV"}
+        };
+        for (const auto& p : adv_list) dict[p.first] = p.second;
+
+        vector<pair<string, string>> pron_list = {
+            {"i", "PRON"}, {"you", "PRON"}, {"he", "PRON"}, {"she", "PRON"}, {"it", "PRON"}, {"we", "PRON"}, {"they", "PRON"}, {"me", "PRON"}, {"him", "PRON"}, {"her", "PRON"}, {"us", "PRON"}, {"them", "PRON"}, {"what", "PRON"}, {"who", "PRON"}, {"whom", "PRON"}, {"whose", "PRON"}, {"which", "PRON"}, {"that", "PRON"}, {"this", "PRON"}, {"these", "PRON"}, {"those", "PRON"}, {"someone", "PRON"}, {"anyone", "PRON"}, {"everyone", "PRON"}, {"no", "PRON"}
+        };
+        for (const auto& p : pron_list) dict[p.first] = p.second;
+
+        vector<pair<string, string>> det_list = {
+            {"the", "DET"}, {"a", "DET"}, {"an", "DET"}, {"my", "DET"}, {"your", "DET"}, {"his", "DET"}, {"her", "DET"}, {"its", "DET"}, {"our", "DET"}, {"their", "DET"}, {"all", "DET"}, {"some", "DET"}, {"any", "DET"}, {"many", "DET"}
+        };
+        for (const auto& p : det_list) dict[p.first] = p.second;
+
+        vector<pair<string, string>> prep_list = {
+            {"in", "PREP"}, {"on", "PREP"}, {"at", "PREP"}, {"by", "PREP"}, {"with", "PREP"}, {"about", "PREP"}, {"against", "PREP"}, {"between", "PREP"}, {"into", "PREP"}, {"through", "PREP"}, {"during", "PREP"}, {"before", "PREP"}, {"after", "PREP"}, {"above", "PREP"}, {"below", "PREP"}, {"from", "PREP"}, {"of", "PREP"}, {"for", "PREP"}, {"to", "PREP"}, {"as", "PREP"}
+        };
+        for (const auto& p : prep_list) dict[p.first] = p.second;
+
+        vector<pair<string, string>> conj_list = {
+            {"and", "CONJ"}, {"but", "CONJ"}, {"or", "CONJ"}, {"so", "CONJ"}, {"yet", "CONJ"}, {"for", "CONJ"}, {"nor", "CONJ"}, {"because", "CONJ"}, {"although", "CONJ"}, {"while", "CONJ"}, {"when", "CONJ"}, {"where", "CONJ"}, {"if", "CONJ"}, {"unless", "CONJ"}, {"until", "CONJ"}
+        };
+        for (const auto& p : conj_list) dict[p.first] = p.second;
+
+        vector<pair<string, string>> can_list = {
+            {"can", "CAN"}, {"could", "CAN"}, {"will", "CAN"}, {"would", "CAN"}, {"shall", "CAN"}, {"should", "CAN"}, {"may", "CAN"}, {"might", "CAN"}, {"must", "CAN"}
+        };
+        for (const auto& p : can_list) dict[p.first] = p.second;
     }
 
-private:
-    void loadPretrainedEmbeddings() {
-        vector<string> pos_tags = {"NOUN", "VERB", "ADJ", "ADV", "PRON", "DET", "ADP", "CONJ", "NUM", "PROPN", "PUNCT"};
-        
-        for (const auto& pos : pos_tags) {
-            pos_embeddings[pos] = vector<float>(EMBEDDING_DIM);
-            for (size_t i = 0; i < EMBEDDING_DIM; i++) {
-                pos_embeddings[pos][i] = static_cast<float>(rand()) / RAND_MAX - 0.5f;
-            }
+    string predict(const string& word, const vector<string>& context) {
+        string w = word;
+        for (char& c : w) c = tolower(c);
+
+        if (!w.empty() && ispunct(w.back())) {
+             w.pop_back();
         }
-    }
-    
-    vector<float> getContextualEmbedding(const string& word, const vector<string>& context) {
-        vector<float> embedding = getWordEmbedding(word);
-        
-        for (const auto& ctx_word : context) {
-            vector<float> ctx_embedding = getWordEmbedding(ctx_word);
-            float attention_score = cosineSimilarity(embedding, ctx_embedding);
-            
-            for (size_t i = 0; i < EMBEDDING_DIM; i++) {
-                embedding[i] += attention_score * ctx_embedding[i];
-            }
-        }
-        
-        return embedding;
-    }
-    
-    string attentionClassification(const vector<float>& embedding) {
-        string best_pos = "NOUN";
-        float best_score = -1.0f;
-        
-        for (const auto& kv : pos_embeddings) {
-            float score = cosineSimilarity(embedding, kv.second);
-            if (score > best_score) {
-                best_score = score;
-                best_pos = kv.first;
-            }
-        }
-        
-        return best_pos;
-    }
-    
-    float cosineSimilarity(const vector<float>& a, const vector<float>& b) {
-        float dot = 0.0f, norm_a = 0.0f, norm_b = 0.0f;
-        for (size_t i = 0; i < a.size(); i++) {
-            dot += a[i] * b[i];
-            norm_a += a[i] * a[i];
-            norm_b += b[i] * b[i];
-        }
-        return dot / (sqrt(norm_a) * sqrt(norm_b) + 1e-8f);
+
+        if (dict.count(w)) return dict[w];
+
+        if (w.length() >= 2 && w.compare(w.length() - 2, 2, "ly") == 0) return "ADV";
+        if (w.length() >= 3 && w.compare(w.length() - 3, 3, "ing") == 0) return "VERB";
+        if (w.length() >= 2 && w.compare(w.length() - 2, 2, "ed") == 0) return "VERB";
+        if (w.length() >= 1 && w.back() == 's' && w.length() > 3) return "NOUN";
+        if ((w.length() >= 3 && w.compare(w.length() - 3, 3, "ion") == 0) ||
+            (w.length() >= 4 && w.compare(w.length() - 4, 4, "ment") == 0) ||
+            (w.length() >= 3 && w.compare(w.length() - 3, 3, "ity") == 0) ||
+            (w.length() >= 4 && w.compare(w.length() - 4, 4, "ness") == 0)) return "NOUN";
+        if ((w.length() >= 3 && w.compare(w.length() - 3, 3, "ous") == 0) ||
+            (w.length() >= 3 && w.compare(w.length() - 3, 3, "ive") == 0) ||
+            (w.length() >= 4 && w.compare(w.length() - 4, 4, "able") == 0) ||
+            (w.length() >= 3 && w.compare(w.length() - 3, 3, "ful") == 0)) return "ADJ";
+        if (word.length() > 0 && isupper(word[0])) return "PROPN";
+
+        return "NOUN";
     }
 };
 
@@ -279,7 +281,6 @@ private:
 struct EnhancedPattern {
     vector<string> posSeq;
     vector<string> semanticRoles;
-    vector<float> embedding;
     long long support = 0;
     double confidence = 0.0;
     double semantic_coherence = 0.0;
@@ -420,7 +421,7 @@ private:
     unordered_map<string, Token> vocab;
     unordered_map<string, EnhancedPattern> patterns;
     NgramCounts ngrams;
-    TransformerPOSModel pos_tagger;
+    RuleBasedPOSTagger pos_tagger;
     NeuralMorphology morph;
     SemanticRoleLabeler srl;
     DependencyParser dep_parser;
@@ -465,16 +466,26 @@ public:
     string generateSentence() {
     if (patterns.empty()) return "(no patterns learned)";
     
-    auto best_pattern = max_element(patterns.begin(), patterns.end(),
-        [](const auto& a, const auto& b) { return a.second.confidence < b.second.confidence; });
-    
+    double total_confidence = 0.0;
+    for (const auto& p : patterns) total_confidence += p.second.confidence;
+
+    double r = ((double)rand() / RAND_MAX) * total_confidence;
+    double accum = 0.0;
+    auto best_pattern = patterns.begin();
+    for (auto it = patterns.begin(); it != patterns.end(); ++it) {
+        accum += it->second.confidence;
+        if (r <= accum) {
+            best_pattern = it;
+            break;
+        }
+    }
     const EnhancedPattern& pattern = best_pattern->second;
     vector<string> words;
     string last_subject = "";
     string last_article = "";
     
     // Try up to 3 times to generate a good sentence
-    for (int attempt = 0; attempt < 3; attempt++) {
+    for (int attempt = 0; attempt < 10; attempt++) {
         words.clear();
         last_subject = "";
         last_article = "";
@@ -483,8 +494,8 @@ public:
             string pos = pattern.posSeq[i];
             string semantic_role = i < pattern.semanticRoles.size() ? pattern.semanticRoles[i] : "";
             
-            string word = sampleWordByPOSAndRole(pos, semantic_role, pattern.slot_fillers);
-            if (word.empty()) word = sampleBySemanticCoherence(pos, pattern.embedding);
+            string prev_word = words.empty() ? "" : words.back();
+            string word = sampleNextWord(pos, prev_word);
             if (word.empty()) word = sampleByPOS(pos);
             
             // Apply English polish rules
@@ -668,25 +679,34 @@ private:
 
        bool makesSemanticSense(const vector<string>& words, const vector<string>& pos_tags) {
     if (words.size() < 2) return false;
-    
+
     // Don't end with prepositions or determiners
     if (pos_tags.back() == "PREP" || pos_tags.back() == "DET") return false;
-    
+
+    // Check for punctuation words in the middle of sentences
+    for (const auto& w : words) {
+        if (w == "." || w == "," || w == "!" || w == "?") return false;
+    }
+
     // Check for basic subject-verb agreement issues
     for (size_t i = 0; i < words.size() - 1; i++) {
         if (pos_tags[i] == "PRON" && pos_tags[i+1] == "VERB") {
-            string subject = words[i];
-            string verb = words[i+1];
-            
+            string subject = toLower(words[i]);
+            string verb = toLower(words[i+1]);
+
             // Basic agreement checks
-            if ((subject == "I" && verb == "are") || 
+            if ((subject == "i" && verb == "are") ||
                 (subject == "he" && verb == "are") ||
-                (subject == "she" && verb == "are")) {
+                (subject == "she" && verb == "are") ||
+                (subject == "they" && verb == "is") ||
+                (subject == "they" && verb == "has") ||
+                (subject == "we" && verb == "is") ||
+                (subject == "you" && verb == "is")) {
                 return false;
             }
         }
     }
-    
+
     return true;
   }
 
@@ -936,7 +956,6 @@ void learnPatternsFromSentence(const vector<string>& words, const vector<string>
             EnhancedPattern& pattern = pattern_entry.second;
             pattern.confidence = calculatePatternConfidence(pattern);
             pattern.semantic_coherence = calculateSemanticCoherence(pattern);
-            pattern.embedding = computePatternEmbedding(pattern);
         }
         
         vector<string> to_remove;
@@ -1024,26 +1043,6 @@ void learnPatternsFromSentence(const vector<string>& words, const vector<string>
         return count > 0 ? total_coherence / count : 0.0;
     }
     
-    vector<float> computePatternEmbedding(const EnhancedPattern& pattern) {
-        vector<float> embedding(EMBEDDING_DIM, 0.0f);
-        
-        for (const auto& pos : pattern.posSeq) {
-            auto it = pos_to_words.find(pos);
-            if (it != pos_to_words.end() && !it->second.empty()) {
-                string sample_word = *it->second.begin();
-                vector<float> word_emb = pos_tagger.getWordEmbedding(sample_word);
-                for (size_t i = 0; i < EMBEDDING_DIM; i++) {
-                    embedding[i] += word_emb[i];
-                }
-            }
-        }
-        
-        for (size_t i = 0; i < EMBEDDING_DIM; i++) {
-            embedding[i] /= pattern.posSeq.size();
-        }
-        
-        return embedding;
-    }
     
     void mergeSimilarPatterns() {
         vector<string> keys;
@@ -1069,16 +1068,14 @@ void learnPatternsFromSentence(const vector<string>& words, const vector<string>
     
     bool arePatternsSimilar(const EnhancedPattern& p1, const EnhancedPattern& p2) {
         if (p1.posSeq.size() != p2.posSeq.size()) return false;
-        
+
         int matching_pos = 0;
         for (size_t i = 0; i < p1.posSeq.size(); i++) {
             if (p1.posSeq[i] == p2.posSeq[i]) matching_pos++;
         }
-        
+
         double pos_similarity = (double)matching_pos / p1.posSeq.size();
-        double semantic_sim = AdvancedStatUtils::semanticSimilarity(p1.embedding, p2.embedding);
-        
-        return (pos_similarity > 0.8 && semantic_sim > 0.7);
+        return (pos_similarity > 0.8);
     }
     
     map<string, double> calculateSlotFillers(const EnhancedPattern& pattern) {
@@ -1091,6 +1088,48 @@ void learnPatternsFromSentence(const vector<string>& words, const vector<string>
         return sampleByPOS(pos);
     }
     
+    string sampleNextWord(const string& pos, const string& prev_word) {
+        if (prev_word.empty()) {
+            return sampleByPOS(pos);
+        }
+
+        auto it = pos_to_words.find(pos);
+        if (it == pos_to_words.end() || it->second.empty()) {
+            return sampleByPOS(pos);
+        }
+
+        vector<pair<string, double>> candidates;
+        double total_weight = 0.0;
+
+        for (const string& word : it->second) {
+            if (vocab.count(word)) {
+                string bigram = prev_word + "	" + word;
+                double bigram_freq = ngrams.bi.count(bigram) ? ngrams.bi[bigram] : 0.1;
+                double unigram_freq = vocab[word].freq;
+
+                double weight = bigram_freq * 10.0 + unigram_freq;
+                weight = pow(weight, 1.2);
+
+                candidates.emplace_back(word, weight);
+                total_weight += weight;
+            }
+        }
+
+        if (candidates.empty() || total_weight == 0.0) {
+            return sampleByPOS(pos);
+        }
+
+        double r = ((double)rand() / RAND_MAX) * total_weight;
+        double accum = 0.0;
+
+        for (const auto& candidate : candidates) {
+            accum += candidate.second;
+            if (r <= accum) return candidate.first;
+        }
+
+        return candidates.back().first;
+    }
+
        string sampleByPOS(const string& pos) {
         auto it = pos_to_words.find(pos);
         
@@ -1147,27 +1186,6 @@ void learnPatternsFromSentence(const vector<string>& words, const vector<string>
         return candidates.back().first;
     }
     
-    string sampleBySemanticCoherence(const string& pos, const vector<float>& pattern_embedding) {
-        auto it = pos_to_words.find(pos);
-        if (it == pos_to_words.end()) return "";
-        
-        string best_word;
-        double best_score = -1.0;
-        
-        for (const string& word : it->second) {
-            if (!vocab.count(word)) continue;
-            
-            vector<float> word_embedding = pos_tagger.getWordEmbedding(word);
-            double score = AdvancedStatUtils::semanticSimilarity(word_embedding, pattern_embedding);
-            
-            if (score > best_score) {
-                best_score = score;
-                best_word = word;
-            }
-        }
-        
-        return best_word;
-    }
     
     string findBestMatchingPattern(const vector<string>& pos_tags, const vector<string>& roles,
                                   const vector<DependencyParser::Dependency>& deps) {
