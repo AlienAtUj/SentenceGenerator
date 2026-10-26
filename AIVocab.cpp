@@ -35,21 +35,21 @@ struct NgramCounts {
 };
 
 // -------------------- Utilities --------------------
-static string toLower(const string &s) { 
-    string r = s; 
-    for(char &c : r) 
-        c = tolower(static_cast<unsigned char>(c)); 
-    return r; 
+static string toLower(const string &s) {
+    string r = s;
+    for(char &c : r)
+        c = tolower(static_cast<unsigned char>(c));
+    return r;
 }
 
-static string join(const vector<string>& v, const string& sep) { 
-    string o; 
-    for(size_t i = 0; i < v.size(); ++i) { 
-        if(i) o += sep; 
-        o += v[i]; 
-    } 
-    
-    return o; 
+static string join(const vector<string>& v, const string& sep) {
+    string o;
+    for(size_t i = 0; i < v.size(); ++i) {
+        if(i) o += sep;
+        o += v[i];
+    }
+
+    return o;
 }
 
 static bool endsWith(const string& s, const string& suffix) {
@@ -57,100 +57,71 @@ static bool endsWith(const string& s, const string& suffix) {
     return s.compare(s.length() - suffix.length(), suffix.length(), suffix) == 0;
 }
 
-static vector<string> split(const string &s, char delim) { 
-    vector<string> out; 
-    string cur; 
-    for(char c : s) { 
-        if(c == delim) { 
-            out.push_back(cur); 
-            cur.clear(); 
+static vector<string> split(const string &s, char delim) {
+    vector<string> out;
+    string cur;
+    for(char c : s) {
+        if(c == delim) {
+            out.push_back(cur);
+            cur.clear();
         } else cur.push_back(c);
-    } 
-    out.push_back(cur); 
-    return out; 
+    }
+    out.push_back(cur);
+    return out;
 }
 
 // -------------------- Neural Network Components --------------------
-class TransformerPOSModel {
+class RuleBasedPOSTagger {
 private:
-    unordered_map<string, vector<float>> word_embeddings;
-    unordered_map<string, vector<float>> pos_embeddings;
-    
+    unordered_map<string, string> dict;
+
 public:
-    TransformerPOSModel() { loadPretrainedEmbeddings(); }
-    
-    string predict(const string& word, const vector<string>& context) {
-        vector<float> embedding = getContextualEmbedding(word, context);
-        return attentionClassification(embedding);
-    }
-    
-    vector<float> getWordEmbedding(const string& word) {
-        string clean_word = toLower(word);
-        if (word_embeddings.count(clean_word)) {
-            return word_embeddings[clean_word];
-        }
-        vector<float> avg_embedding(EMBEDDING_DIM, 0.0f);
-        for (const auto& kv : word_embeddings) {
-            for (size_t i = 0; i < EMBEDDING_DIM; i++) {
-                avg_embedding[i] += kv.second[i];
+    RuleBasedPOSTagger() {
+        // Pre-populate with common words to establish base patterns
+        vector<pair<string, vector<string>>> dictionary = {
+            {"PRON", {"i", "you", "he", "she", "it", "we", "they", "me", "him", "her", "us", "them", "my", "your", "his", "our", "their", "this", "that"}},
+            {"DET", {"the", "a", "an", "this", "that", "these", "those", "some", "any", "all", "every"}},
+            {"PREP", {"in", "on", "at", "to", "for", "with", "by", "from", "of", "about", "into", "over", "under"}},
+            {"CONJ", {"and", "but", "or", "so", "because", "if", "when", "while"}},
+            {"VERB", {"is", "are", "was", "were", "be", "been", "have", "has", "had", "do", "does", "did", "will", "would", "can", "could", "should", "may", "might"}},
+            {"NOUN", {"time", "person", "year", "way", "day", "thing", "man", "world", "life", "hand", "part", "child", "eye", "woman", "place", "work", "week", "case", "point", "government", "company", "number", "group", "problem", "fact"}}
+        };
+
+        for (const auto& entry : dictionary) {
+            for (const string& word : entry.second) {
+                dict[word] = entry.first;
             }
         }
-        for (size_t i = 0; i < EMBEDDING_DIM; i++) {
-            avg_embedding[i] /= word_embeddings.size();
-        }
-        return avg_embedding;
     }
 
-private:
-    void loadPretrainedEmbeddings() {
-        vector<string> pos_tags = {"NOUN", "VERB", "ADJ", "ADV", "PRON", "DET", "ADP", "CONJ", "NUM", "PROPN", "PUNCT"};
-        
-        for (const auto& pos : pos_tags) {
-            pos_embeddings[pos] = vector<float>(EMBEDDING_DIM);
-            for (size_t i = 0; i < EMBEDDING_DIM; i++) {
-                pos_embeddings[pos][i] = static_cast<float>(rand()) / RAND_MAX - 0.5f;
-            }
+    string predict(const string& word, const vector<string>& context) {
+        string w = toLower(word);
+
+        if (dict.count(w)) return dict[w];
+
+        // Basic heuristics
+        if (w.length() > 2 && w.substr(w.length() - 2) == "ly") return "ADV";
+        if (w.length() > 3 && w.substr(w.length() - 3) == "ing") return "VERB";
+        if (w.length() > 2 && w.substr(w.length() - 2) == "ed") return "VERB";
+        if (w.length() > 3 && w.substr(w.length() - 3) == "ous") return "ADJ";
+        if (w.length() > 3 && w.substr(w.length() - 3) == "ful") return "ADJ";
+        if (w.length() > 4 && w.substr(w.length() - 4) == "less") return "ADJ";
+        if (w.length() > 4 && w.substr(w.length() - 4) == "ness") return "NOUN";
+        if (w.length() > 4 && w.substr(w.length() - 4) == "ment") return "NOUN";
+        if (w.length() > 3 && w.substr(w.length() - 3) == "ion") return "NOUN";
+
+        // Capitalized words usually proper nouns, unless start of sentence (hard to tell here, so fallback)
+        if (!word.empty() && isupper(word[0])) {
+             return "PROPN";
         }
+
+        // Default to NOUN which is statistically most common for unknown words
+        return "NOUN";
     }
-    
-    vector<float> getContextualEmbedding(const string& word, const vector<string>& context) {
-        vector<float> embedding = getWordEmbedding(word);
-        
-        for (const auto& ctx_word : context) {
-            vector<float> ctx_embedding = getWordEmbedding(ctx_word);
-            float attention_score = cosineSimilarity(embedding, ctx_embedding);
-            
-            for (size_t i = 0; i < EMBEDDING_DIM; i++) {
-                embedding[i] += attention_score * ctx_embedding[i];
-            }
-        }
-        
-        return embedding;
-    }
-    
-    string attentionClassification(const vector<float>& embedding) {
-        string best_pos = "NOUN";
-        float best_score = -1.0f;
-        
-        for (const auto& kv : pos_embeddings) {
-            float score = cosineSimilarity(embedding, kv.second);
-            if (score > best_score) {
-                best_score = score;
-                best_pos = kv.first;
-            }
-        }
-        
-        return best_pos;
-    }
-    
-    float cosineSimilarity(const vector<float>& a, const vector<float>& b) {
-        float dot = 0.0f, norm_a = 0.0f, norm_b = 0.0f;
-        for (size_t i = 0; i < a.size(); i++) {
-            dot += a[i] * b[i];
-            norm_a += a[i] * a[i];
-            norm_b += b[i] * b[i];
-        }
-        return dot / (sqrt(norm_a) * sqrt(norm_b) + 1e-8f);
+
+    vector<float> getWordEmbedding(const string& word) {
+        // Return dummy embedding just to satisfy existing API usage in EnhancedPatternModel
+        return vector<float>(EMBEDDING_DIM, 0.1f);
     }
 };
 
@@ -169,7 +140,7 @@ public:
 
     string lemmatize(const string& word, const string& pos, double& confidence) {
         string w = toLower(word);
-        
+
         string key = w + "_" + pos;
         if (auto it = irregular_forms.find(key); it != irregular_forms.end()) {
             confidence = 0.99;
@@ -183,19 +154,19 @@ public:
     vector<string> getMorphologicalFeatures(const string& word, const string& pos) {
         vector<string> features;
         string w = toLower(word);
-        
+
         if (pos == "VERB") {
             if (endsWith(w, "ing")) features.push_back("PRESENT_PARTICIPLE");
             else if (endsWith(w, "ed")) features.push_back("PAST_TENSE");
             else if (endsWith(w, "s")) features.push_back("THIRD_PERSON_SINGULAR");
             else features.push_back("BASE_FORM");
         }
-        
+
         if (pos == "NOUN") {
             if (endsWith(w, "s") && !endsWith(w, "ss")) features.push_back("PLURAL");
             else features.push_back("SINGULAR");
         }
-        
+
         return features;
     }
 
@@ -210,7 +181,7 @@ private:
             {"gave", "give"}, {"given", "give"}, {"found", "find"}, {"finding", "find"},
             {"thought", "think"}, {"thinking", "think"}, {"knew", "know"}, {"known", "know"}
         };
-        
+
         for (const auto& form_base : irregular_verbs) {
             irregular_forms[form_base.first + "_VERB"] = form_base.second;
         }
@@ -220,7 +191,7 @@ private:
             {"feet", "foot"}, {"teeth", "tooth"}, {"geese", "goose"}, {"oxen", "ox"},
             {"data", "datum"}, {"phenomena", "phenomenon"}, {"criteria", "criterion"}
         };
-        
+
         for (const auto& plural_singular : irregular_nouns) {
             irregular_forms[plural_singular.first + "_NOUN"] = plural_singular.second;
         }
@@ -231,7 +202,7 @@ private:
         suffix_rules["NOUN"] = {"s", "es", "ies", "ves"};
         suffix_rules["ADJ"] = {"er", "est", "ish", "ive", "able", "ible"};
         suffix_rules["ADV"] = {"ly", "wise", "ward", "wards"};
-        
+
         rule_confidence["ing_VERB"] = 0.95;
         rule_confidence["ed_VERB"] = 0.92;
         rule_confidence["s_NOUN"] = 0.88;
@@ -239,14 +210,14 @@ private:
 
     string applySuffixRules(const string& word, const string& pos, double& confidence) {
         confidence = 0.0;
-        
+
         if (!suffix_rules.count(pos)) return word;
-        
+
         for (const auto& suffix : suffix_rules[pos]) {
             if (endsWith(word, suffix)) {
                 string base = word.substr(0, word.length() - suffix.length());
                 string rule_key = suffix + "_" + pos;
-                
+
                 if (suffix == "ies" && pos == "NOUN") {
                     base = word.substr(0, word.length() - 3) + "y";
                     confidence = 0.94;
@@ -270,7 +241,7 @@ private:
                 }
             }
         }
-        
+
         return word;
     }
 };
@@ -284,7 +255,7 @@ struct EnhancedPattern {
     double confidence = 0.0;
     double semantic_coherence = 0.0;
     map<string, double> slot_fillers;
-    
+
     string getKey() const {
         return join(posSeq, "_") + "|" + join(semanticRoles, "-");
     }
@@ -294,15 +265,15 @@ struct EnhancedPattern {
 class SemanticRoleLabeler {
 private:
     unordered_map<string, vector<string>> verb_frames;
-    
+
 public:
     SemanticRoleLabeler() {
         initializeVerbFrames();
     }
-    
+
     vector<string> labelRoles(const vector<string>& pos_sequence, const vector<string>& words) {
         vector<string> roles(pos_sequence.size(), "O");
-        
+
         int verb_pos = -1;
         for (size_t i = 0; i < pos_sequence.size(); i++) {
             if (pos_sequence[i] == "VERB") {
@@ -310,25 +281,25 @@ public:
                 break;
             }
         }
-        
+
         if (verb_pos == -1) return roles;
-        
+
         roles[verb_pos] = "V";
-        
+
         for (int i = verb_pos - 1; i >= 0; i--) {
             if (pos_sequence[i] == "NOUN" || pos_sequence[i] == "PRON" || pos_sequence[i] == "PROPN") {
                 roles[i] = "S";
                 break;
             }
         }
-        
+
         for (size_t i = verb_pos + 1; i < pos_sequence.size(); i++) {
             if (pos_sequence[i] == "NOUN" || pos_sequence[i] == "PRON" || pos_sequence[i] == "PROPN") {
                 roles[i] = "O";
                 break;
             }
         }
-        
+
         return roles;
     }
 
@@ -351,7 +322,7 @@ public:
         double pmi = log(p12 / (p1 * p2));
         return pmi / (-log(p12) + 1e-8);
     }
-    
+
     static double jaccardSimilarity(const unordered_set<string>& set1, const unordered_set<string>& set2) {
         size_t intersection = 0;
         for (const auto& item : set1) {
@@ -360,7 +331,7 @@ public:
         size_t union_size = set1.size() + set2.size() - intersection;
         return union_size > 0 ? (double)intersection / union_size : 0.0;
     }
-    
+
     static double semanticSimilarity(const vector<float>& emb1, const vector<float>& emb2) {
         double dot = 0.0, norm1 = 0.0, norm2 = 0.0;
         for (size_t i = 0; i < emb1.size(); i++) {
@@ -380,14 +351,14 @@ public:
         int head;
         int dependent;
     };
-    
+
     vector<Dependency> parse(const vector<string>& words, const vector<string>& pos_tags) {
         vector<Dependency> deps;
-        
+
         for (size_t i = 0; i < words.size(); i++) {
             Dependency dep;
             dep.dependent = i;
-            
+
             if (pos_tags[i] == "VERB") {
                 dep.head = -1;
                 dep.relation = "ROOT";
@@ -406,10 +377,10 @@ public:
                 dep.head = max(0, (int)i - 1);
                 dep.relation = "unk";
             }
-            
+
             deps.push_back(dep);
         }
-        
+
         return deps;
     }
 };
@@ -420,11 +391,11 @@ private:
     unordered_map<string, Token> vocab;
     unordered_map<string, EnhancedPattern> patterns;
     NgramCounts ngrams;
-    TransformerPOSModel pos_tagger;
+    RuleBasedPOSTagger pos_tagger;
     NeuralMorphology morph;
     SemanticRoleLabeler srl;
     DependencyParser dep_parser;
-    
+
     long long totalTokens = 0;
     unordered_map<string, unordered_set<string>> pos_to_words;
 
@@ -432,61 +403,92 @@ public:
     EnhancedPatternModel() {
         addCommonPatternsBase();
     }
-    
+
     void learnFromFile(const string& path) {
     addCommonPatternsBase();
-    
+
     ifstream in(path);
     if (!in) { cerr << "Cannot open: " << path << endl; return; }
-        
+
         string line;
         vector<string> sentence_words, sentence_pos;
         int line_count = 0;
-        
+
         while (getline(in, line)) {
             line_count++;
             if (line_count % 10000 == 0) {
                 cout << "Processed " << line_count << " lines, Patterns: " << patterns.size() << endl;
             }
-            
+
             processSentence(line, sentence_words, sentence_pos);
-            
+
             if (line_count % 1000 == 0) {
                 inducePatternsBatch();
             }
         }
-        
+
         in.close();
         finalizePatternInduction();
         computeAdvancedWeights();
         cout << "Learning complete. Patterns: " << patterns.size() << endl;
     }
-    
+
     string generateSentence() {
     if (patterns.empty()) return "(no patterns learned)";
-    
-    auto best_pattern = max_element(patterns.begin(), patterns.end(),
-        [](const auto& a, const auto& b) { return a.second.confidence < b.second.confidence; });
-    
-    const EnhancedPattern& pattern = best_pattern->second;
+
+    // Use weighted random sampling instead of always taking the best pattern
+    vector<pair<string, EnhancedPattern>> candidate_patterns;
+    double total_confidence = 0.0;
+
+    for (const auto& entry : patterns) {
+        if (entry.second.confidence > MIN_PATTERN_CONFIDENCE) {
+            candidate_patterns.push_back(entry);
+            // Exponential boost for higher confidence to still favor good patterns
+            total_confidence += pow(entry.second.confidence, 3.0);
+        }
+    }
+
+    // Fallback if none exceed threshold
+    if (candidate_patterns.empty()) {
+        auto best_pattern = max_element(patterns.begin(), patterns.end(),
+            [](const auto& a, const auto& b) { return a.second.confidence < b.second.confidence; });
+        candidate_patterns.push_back(*best_pattern);
+        total_confidence = 1.0;
+    }
+
+    double r = ((double)rand() / RAND_MAX) * total_confidence;
+    double accum = 0.0;
+
+    const EnhancedPattern* selected_pattern = &candidate_patterns.front().second;
+    for (const auto& candidate : candidate_patterns) {
+        accum += pow(candidate.second.confidence, 3.0);
+        if (r <= accum) {
+            selected_pattern = &candidate.second;
+            break;
+        }
+    }
+
+    const EnhancedPattern& pattern = *selected_pattern;
     vector<string> words;
     string last_subject = "";
     string last_article = "";
-    
+
     // Try up to 3 times to generate a good sentence
     for (int attempt = 0; attempt < 3; attempt++) {
         words.clear();
         last_subject = "";
         last_article = "";
-        
+
         for (size_t i = 0; i < pattern.posSeq.size(); i++) {
             string pos = pattern.posSeq[i];
             string semantic_role = i < pattern.semanticRoles.size() ? pattern.semanticRoles[i] : "";
-            
-            string word = sampleWordByPOSAndRole(pos, semantic_role, pattern.slot_fillers);
-            if (word.empty()) word = sampleBySemanticCoherence(pos, pattern.embedding);
+
+            string prev_word = words.empty() ? "" : words.back();
+            string word = sampleWordWithMarkov(pos, prev_word);
+
+            if (word.empty()) word = sampleWordByPOSAndRole(pos, semantic_role, pattern.slot_fillers);
             if (word.empty()) word = sampleByPOS(pos);
-            
+
             // Apply English polish rules
             if (pos == "VERB" && !last_subject.empty()) {
                 word = conjugateVerb(word, last_subject);
@@ -499,26 +501,26 @@ public:
                 word = correctArticle(last_article, word);
                 last_article.clear();
             }
-            
+
             // === ADD THIS NEW LINE ===
             // Apply pronoun case correction
             if (pos == "PRON" && semantic_role == "S") {
                 word = correctPronounCase(word, semantic_role);
             }
-            
+
             // Remember subject for verb conjugation
             if (semantic_role == "S" || (pos == "PRON" && i == 0)) {
                 last_subject = word;
             }
-            
+
             words.push_back(word);
         }
-        
+
         // Handle case where article was last word
         if (!last_article.empty()) {
             words.push_back("a");
         }
-        
+
         // === ADD THIS CHECK ===
         // If sentence makes semantic sense, use it
         if (makesSemanticSense(words, pattern.posSeq)) {
@@ -526,26 +528,26 @@ public:
         }
         // Otherwise try again (we'll loop up to 3 times)
     }
-    
+
     return formatSentence(words);
    }
-    
+
     string interpret(const string& sentence) {
         vector<string> words = advancedTokenize(sentence);
         if (words.empty()) return "unknown";
-        
+
         vector<string> pos_tags = tagSentence(words);
         vector<DependencyParser::Dependency> deps = dep_parser.parse(words, pos_tags);
         vector<string> roles = srl.labelRoles(pos_tags, words);
-        
+
         string best_pattern = findBestMatchingPattern(pos_tags, roles, deps);
         return best_pattern.empty() ? "unknown" : best_pattern;
     }
-    
+
     bool saveModel(const string& path) {
         ofstream out(path, ios::binary);
         if (!out) return false;
-        
+
         size_t vocab_size = vocab.size();
         out.write(reinterpret_cast<const char*>(&vocab_size), sizeof(vocab_size));
         for (const auto& entry : vocab) {
@@ -556,7 +558,7 @@ public:
             out.write(word.c_str(), len);
             out.write(reinterpret_cast<const char*>(&token.freq), sizeof(token.freq));
         }
-        
+
         size_t pattern_size = patterns.size();
         out.write(reinterpret_cast<const char*>(&pattern_size), sizeof(pattern_size));
         for (const auto& entry : patterns) {
@@ -571,18 +573,18 @@ public:
             out.write(reinterpret_cast<const char*>(&pattern.support), sizeof(pattern.support));
             out.write(reinterpret_cast<const char*>(&pattern.confidence), sizeof(pattern.confidence));
         }
-        
+
         out.close();
         return true;
     }
-    
+
     bool loadModel(const string& path) {
         ifstream in(path, ios::binary);
         if (!in) return false;
-        
+
         vocab.clear();
         patterns.clear();
-        
+
         size_t vocab_size;
         in.read(reinterpret_cast<char*>(&vocab_size), sizeof(vocab_size));
         for (size_t i = 0; i < vocab_size; i++) {
@@ -590,12 +592,12 @@ public:
             in.read(reinterpret_cast<char*>(&len), sizeof(len));
             string word(len, ' ');
             in.read(&word[0], len);
-            
+
             Token token;
             in.read(reinterpret_cast<char*>(&token.freq), sizeof(token.freq));
             vocab[word] = token;
         }
-        
+
         size_t pattern_size;
         in.read(reinterpret_cast<char*>(&pattern_size), sizeof(pattern_size));
         for (size_t i = 0; i < pattern_size; i++) {
@@ -612,43 +614,43 @@ public:
             }
             in.read(reinterpret_cast<char*>(&pattern.support), sizeof(pattern.support));
             in.read(reinterpret_cast<char*>(&pattern.confidence), sizeof(pattern.confidence));
-            
+
             patterns[pattern.getKey()] = pattern;
         }
-        
+
         in.close();
         computeAdvancedWeights();
         return true;
     }
-    
+
     void showPatterns(size_t limit = 20) {
         vector<pair<string, EnhancedPattern>> sorted_patterns;
         for (const auto& entry : patterns) {
             sorted_patterns.push_back(entry);
         }
-        
+
         sort(sorted_patterns.begin(), sorted_patterns.end(),
             [](const auto& a, const auto& b) { return a.second.confidence > b.second.confidence; });
-        
+
         cout << "Top " << limit << " Patterns:" << endl;
         for (size_t i = 0; i < min(limit, sorted_patterns.size()); i++) {
             const auto& pattern_entry = sorted_patterns[i];
-            cout << (i + 1) << ". " << pattern_entry.first 
-                 << " (conf: " << pattern_entry.second.confidence 
-                 << ", sup: " << pattern_entry.second.support 
+            cout << (i + 1) << ". " << pattern_entry.first
+                 << " (conf: " << pattern_entry.second.confidence
+                 << ", sup: " << pattern_entry.second.support
                  << ", coh: " << pattern_entry.second.semantic_coherence << ")" << endl;
         }
     }
-    
+
     void showVocab(size_t limit = 50) {
         vector<pair<string, long long>> vocab_items;
         for (const auto& entry : vocab) {
             vocab_items.emplace_back(entry.first, entry.second.freq);
         }
-        
+
         sort(vocab_items.begin(), vocab_items.end(),
             [](const auto& a, const auto& b) { return a.second > b.second; });
-        
+
         cout << "Top " << limit << " Vocabulary:" << endl;
         for (size_t i = 0; i < min(limit, vocab_items.size()); i++) {
             cout << (i + 1) << ". " << vocab_items[i].first << " (" << vocab_items[i].second << ")" << endl;
@@ -659,7 +661,7 @@ private:
 
     string correctPronounCase(const string& pronoun, const string& grammaticalRole) {
         static unordered_map<string, string> subject_forms = {{"me", "I"}, {"him", "he"}, {"her", "she"}, {"us", "we"}, {"them", "they"}};
-        
+
         if (grammaticalRole == "S" && subject_forms.count(pronoun)) {
             return subject_forms[pronoun];
         }
@@ -668,32 +670,32 @@ private:
 
        bool makesSemanticSense(const vector<string>& words, const vector<string>& pos_tags) {
     if (words.size() < 2) return false;
-    
+
     // Don't end with prepositions or determiners
     if (pos_tags.back() == "PREP" || pos_tags.back() == "DET") return false;
-    
+
     // Check for basic subject-verb agreement issues
     for (size_t i = 0; i < words.size() - 1; i++) {
         if (pos_tags[i] == "PRON" && pos_tags[i+1] == "VERB") {
             string subject = words[i];
             string verb = words[i+1];
-            
+
             // Basic agreement checks
-            if ((subject == "I" && verb == "are") || 
+            if ((subject == "I" && verb == "are") ||
                 (subject == "he" && verb == "are") ||
                 (subject == "she" && verb == "are")) {
                 return false;
             }
         }
     }
-    
+
     return true;
   }
 
    string conjugateVerb(const string& baseVerb, const string& subject, const string& tense = "present") {
     // Handle common irregular verbs
     static unordered_map<string, unordered_map<string, string>> irregularVerbs = {
-        {"be", {{"I", "am"}, {"you", "are"}, {"he", "is"}, {"she", "is"}, {"it", "is"}, {"we", "are"}, {"they", "are"}, 
+        {"be", {{"I", "am"}, {"you", "are"}, {"he", "is"}, {"she", "is"}, {"it", "is"}, {"we", "are"}, {"they", "are"},
                 {"my", "is"}, {"your", "is"}, {"his", "is"}, {"her", "is"}, {"our", "is"}, {"their", "is"}, {"this", "is"}, {"that", "is"}}},
         {"have", {{"I", "have"}, {"you", "have"}, {"he", "has"}, {"she", "has"}, {"it", "has"}, {"we", "have"}, {"they", "have"}}},
         {"do", {{"I", "do"}, {"you", "do"}, {"he", "does"}, {"she", "does"}, {"it", "does"}, {"we", "do"}, {"they", "do"}}},
@@ -703,31 +705,31 @@ private:
         {"take", {{"I", "take"}, {"you", "take"}, {"he", "takes"}, {"she", "takes"}, {"it", "takes"}, {"we", "take"}, {"they", "take"}}},
         {"come", {{"I", "come"}, {"you", "come"}, {"he", "comes"}, {"she", "comes"}, {"it", "comes"}, {"we", "come"}, {"they", "come"}}}
     };
-    
+
     // Handle past tense irregulars
     static unordered_map<string, string> pastTense = {
-        {"go", "went"}, {"make", "made"}, {"take", "took"}, {"come", "came"}, 
+        {"go", "went"}, {"make", "made"}, {"take", "took"}, {"come", "came"},
         {"see", "saw"}, {"do", "did"}, {"have", "had"}, {"say", "said"},
         {"get", "got"}, {"know", "knew"}, {"think", "thought"}, {"find", "found"}
     };
-    
+
     string verb = toLower(baseVerb);
-    
+
     // Handle past tense
     if (tense == "past" && pastTense.count(verb)) {
         return pastTense[verb];
     }
-    
+
     // Check irregular verbs first
     if (irregularVerbs.count(verb) && irregularVerbs[verb].count(subject)) {
         return irregularVerbs[verb][subject];
     }
-    
+
     // Regular verb conjugation for third person singular
     static unordered_set<string> thirdPersonSingular = {
         "he", "she", "it", "his", "her", "its", "my", "your", "our", "their", "this", "that"
     };
-    
+
     if (thirdPersonSingular.count(subject)) {
         // Add 's' for third person singular (present tense)
         if (tense == "present") {
@@ -735,7 +737,7 @@ private:
             if (endsWith(verb, "ch") || endsWith(verb, "sh") || endsWith(verb, "x") || endsWith(verb, "s") || endsWith(verb, "z")) {
                 return verb + "es";
             }
-            else if (endsWith(verb, "y") && verb.length() > 1 && 
+            else if (endsWith(verb, "y") && verb.length() > 1 &&
                      string("aeiou").find(verb[verb.length()-2]) == string::npos) {
                 return verb.substr(0, verb.length()-1) + "ies";
             }
@@ -744,73 +746,73 @@ private:
             }
         }
     }
-    
+
     return verb;
    }
     string correctArticle(const string& article, const string& nextWord) {
         if (article != "a" && article != "an") return article;
-        
+
         if (nextWord.empty()) return "a";
-        
+
         char firstLetter = tolower(nextWord[0]);
-        
+
         // Words that start with vowel sounds
         if (string("aeiou").find(firstLetter) != string::npos) {
             return "an";
         }
-        
+
         // Special cases: silent 'h' words
         static unordered_set<string> silentHWords = {"hour", "honest", "honor", "heir", "herb"};
         if (silentHWords.count(nextWord)) {
             return "an";
         }
-        
+
         return "a";
     }
     void processSentence(const string& line, vector<string>& words, vector<string>& pos_tags) {
         words = advancedTokenize(line);
         if (words.empty()) return;
-        
+
         pos_tags = tagSentence(words);
         updateNgramsAndVocab(words, pos_tags);
-        
+
         auto deps = dep_parser.parse(words, pos_tags);
         auto roles = srl.labelRoles(pos_tags, words);
         learnPatternsFromSentence(words, pos_tags, roles, deps);
-        
+
         totalTokens += words.size();
     }
-    
+
     vector<string> advancedTokenize(const string& text) {
         vector<string> tokens;
         regex word_regex(R"([a-zA-Z]+(?:[''][a-zA-Z]+)*|[0-9]+[.,]?[0-9]*|[.!?;,-])");
-        
+
         sregex_iterator it(text.begin(), text.end(), word_regex);
         sregex_iterator end;
-        
+
         while (it != end) {
             tokens.push_back(it->str());
             ++it;
         }
-        
+
         return tokens;
     }
-    
+
     vector<string> tagSentence(const vector<string>& words) {
         vector<string> pos_tags;
         pos_tags.reserve(words.size());
-        
+
         for (size_t i = 0; i < words.size(); i++) {
             vector<string> context;
             for (int j = max(0, (int)i - 2); j < min((int)words.size(), (int)i + 3); j++) {
                 if (j != (int)i) context.push_back(words[j]);
             }
-            
+
             string pos = pos_tagger.predict(words[i], context);
             pos_tags.push_back(pos);
             pos_to_words[pos].insert(words[i]);
         }
-        
+
         return pos_tags;
     }
     void addCommonPatternsBase() {
@@ -827,7 +829,7 @@ private:
             {{"NOUN", "VERB", "DET", "NOUN"}, {"S", "V", "O"}, "Teachers read books"},
             {{"PRON", "CAN", "VERB"}, {"S", "V", "O"}, "I can swim"}
         };
-        
+
         for (const auto& [posSeq, roles, example] : commonPatterns) {
             string key = join(posSeq, "_") + "|" + join(roles, "-");
             if (!patterns.count(key)) {
@@ -837,42 +839,42 @@ private:
                 newPattern.support = 20; // Good base support
                 newPattern.confidence = 0.9;
                 newPattern.semantic_coherence = 0.85;
-                
+
                 // Add some basic slot fillers
                 if (posSeq.size() >= 3) {
                     if (posSeq[0] == "PRON") newPattern.slot_fillers["S"] = 0.8;
                     if (posSeq[1] == "VERB") newPattern.slot_fillers["V"] = 0.9;
                     if (posSeq[2] == "NOUN") newPattern.slot_fillers["O"] = 0.7;
                 }
-                
+
                 patterns[key] = newPattern;
                 cout << "Added base pattern: " << key << " (" << example << ")" << endl;
             }
         }
     }
 void learnPatternsFromSentence(const vector<string>& words, const vector<string>& pos_tags,
-                                  const vector<string>& roles, 
+                                  const vector<string>& roles,
                                   const vector<DependencyParser::Dependency>& deps) {
         if (words.size() < 2) return;
-        
+
         // Extract n-gram patterns (2-4 grams)
         for (size_t n = 2; n <= 4 && n <= words.size(); n++) {
             for (size_t i = 0; i <= words.size() - n; i++) {
                 vector<string> pattern_pos(pos_tags.begin() + i, pos_tags.begin() + i + n);
                 vector<string> pattern_roles(roles.begin() + i, roles.begin() + i + n);
-                
+
                 // Skip patterns with too many unknown/out roles
                 int valid_roles = 0;
                 for (const auto& role : pattern_roles) {
                     if (role != "O") valid_roles++;
                 }
                 if (valid_roles < 1) continue;
-                
+
                 EnhancedPattern pattern;
                 pattern.posSeq = pattern_pos;
                 pattern.semanticRoles = pattern_roles;
                 pattern.support++;
-                
+
                 string key = pattern.getKey();
                 if (patterns.count(key)) {
                     patterns[key].support++;
@@ -881,17 +883,17 @@ void learnPatternsFromSentence(const vector<string>& words, const vector<string>
                 }
             }
         }
-        
+
         // Enhanced dependency-based patterns
         for (const auto& dep : deps) {
             if (dep.relation == "nsubj" || dep.relation == "dobj" || dep.relation == "amod") {
-                if (dep.head >= 0 && dep.head < (int)pos_tags.size() && 
+                if (dep.head >= 0 && dep.head < (int)pos_tags.size() &&
                     dep.dependent < (int)pos_tags.size()) {
-                    
+
                     // Create subject-verb-object patterns
                     if (dep.relation == "nsubj") {
                         vector<string> pattern_pos = {pos_tags[dep.dependent], pos_tags[dep.head]};
-                        
+
                         // Look for objects
                         for (const auto& dep2 : deps) {
                             if (dep2.head == dep.head && dep2.relation == "dobj") {
@@ -899,7 +901,7 @@ void learnPatternsFromSentence(const vector<string>& words, const vector<string>
                                 break;
                             }
                         }
-                        
+
                         if (pattern_pos.size() >= 2) {
                             EnhancedPattern pattern;
                             pattern.posSeq = pattern_pos;
@@ -912,7 +914,7 @@ void learnPatternsFromSentence(const vector<string>& words, const vector<string>
                             }
                         }
                     }
-                    
+
                     // Create adjective-noun patterns
                     if (dep.relation == "amod") {
                         vector<string> pattern_pos = {pos_tags[dep.dependent], pos_tags[dep.head]};
@@ -930,7 +932,7 @@ void learnPatternsFromSentence(const vector<string>& words, const vector<string>
             }
         }
     }
-    
+
     void inducePatternsBatch() {
         for (auto& pattern_entry : patterns) {
             EnhancedPattern& pattern = pattern_entry.second;
@@ -938,35 +940,35 @@ void learnPatternsFromSentence(const vector<string>& words, const vector<string>
             pattern.semantic_coherence = calculateSemanticCoherence(pattern);
             pattern.embedding = computePatternEmbedding(pattern);
         }
-        
+
         vector<string> to_remove;
         for (const auto& pattern_entry : patterns) {
             const EnhancedPattern& pattern = pattern_entry.second;
-            if (pattern.support < PATTERN_SUPPORT_THRESHOLD || 
+            if (pattern.support < PATTERN_SUPPORT_THRESHOLD ||
                 pattern.confidence < MIN_PATTERN_CONFIDENCE) {
                 to_remove.push_back(pattern_entry.first);
             }
         }
-        
+
         for (const auto& key : to_remove) {
             patterns.erase(key);
         }
     }
-    
+
     void finalizePatternInduction() {
         mergeSimilarPatterns();
         for (auto& pattern_entry : patterns) {
             pattern_entry.second.slot_fillers = calculateSlotFillers(pattern_entry.second);
         }
     }
-    
+
     double calculatePatternConfidence(const EnhancedPattern& pattern) {
         // Support-based confidence (logarithmic scaling)
         double support_confidence = min(1.0, log(pattern.support + 1) / log(50.0));
-        
+
         // Length factor (longer patterns are more informative but rarer)
         double length_factor = 0.5 + (0.5 * (1.0 - exp(-0.3 * pattern.posSeq.size())));
-        
+
         // Semantic role factor (patterns with clear roles are better)
         double role_factor = 0.5;
         if (!pattern.semanticRoles.empty()) {
@@ -976,33 +978,33 @@ void learnPatternsFromSentence(const vector<string>& words, const vector<string>
             }
             role_factor = 0.3 + (0.7 * (double)clear_roles / pattern.semanticRoles.size());
         }
-        
+
         // Pattern quality based on POS sequence
         double sequence_quality = calculateSequenceQuality(pattern.posSeq);
-        
-        return (support_confidence * 0.4 + 
-                pattern.semantic_coherence * 0.3 + 
-                role_factor * 0.2 + 
+
+        return (support_confidence * 0.4 +
+                pattern.semantic_coherence * 0.3 +
+                role_factor * 0.2 +
                 sequence_quality * 0.1) * length_factor;
     }
-    
+
     double calculateSequenceQuality(const vector<string>& pos_seq) {
         // Score patterns based on linguistic quality
         static const unordered_set<string> good_starts = {"PRON", "DET", "NOUN", "PROPN"};
         static const unordered_set<string> good_ends = {"NOUN", "VERB", "ADJ", "ADV"};
-        
+
         double score = 0.5; // Base score
-        
+
         // Good starting POS
         if (!pos_seq.empty() && good_starts.count(pos_seq[0])) {
             score += 0.2;
         }
-        
+
         // Good ending POS
         if (!pos_seq.empty() && good_ends.count(pos_seq.back())) {
             score += 0.2;
         }
-        
+
         // Contains a verb
         for (const auto& pos : pos_seq) {
             if (pos == "VERB") {
@@ -1010,10 +1012,10 @@ void learnPatternsFromSentence(const vector<string>& words, const vector<string>
                 break;
             }
         }
-        
+
         return min(1.0, score);
     }
-    
+
     double calculateSemanticCoherence(const EnhancedPattern& pattern) {
         double total_coherence = 0.0;
         int count = 0;
@@ -1023,10 +1025,10 @@ void learnPatternsFromSentence(const vector<string>& words, const vector<string>
         }
         return count > 0 ? total_coherence / count : 0.0;
     }
-    
+
     vector<float> computePatternEmbedding(const EnhancedPattern& pattern) {
         vector<float> embedding(EMBEDDING_DIM, 0.0f);
-        
+
         for (const auto& pos : pattern.posSeq) {
             auto it = pos_to_words.find(pos);
             if (it != pos_to_words.end() && !it->second.empty()) {
@@ -1037,27 +1039,27 @@ void learnPatternsFromSentence(const vector<string>& words, const vector<string>
                 }
             }
         }
-        
+
         for (size_t i = 0; i < EMBEDDING_DIM; i++) {
             embedding[i] /= pattern.posSeq.size();
         }
-        
+
         return embedding;
     }
-    
+
     void mergeSimilarPatterns() {
         vector<string> keys;
         for (const auto& kv : patterns) keys.push_back(kv.first);
-        
+
         for (size_t i = 0; i < keys.size(); i++) {
             if (!patterns.count(keys[i])) continue;
-            
+
             for (size_t j = i + 1; j < keys.size(); j++) {
                 if (!patterns.count(keys[j])) continue;
-                
+
                 EnhancedPattern& p1 = patterns[keys[i]];
                 EnhancedPattern& p2 = patterns[keys[j]];
-                
+
                 if (arePatternsSimilar(p1, p2)) {
                     p1.support += p2.support;
                     p1.confidence = max(p1.confidence, p2.confidence);
@@ -1066,34 +1068,84 @@ void learnPatternsFromSentence(const vector<string>& words, const vector<string>
             }
         }
     }
-    
+
     bool arePatternsSimilar(const EnhancedPattern& p1, const EnhancedPattern& p2) {
         if (p1.posSeq.size() != p2.posSeq.size()) return false;
-        
+
         int matching_pos = 0;
         for (size_t i = 0; i < p1.posSeq.size(); i++) {
             if (p1.posSeq[i] == p2.posSeq[i]) matching_pos++;
         }
-        
+
         double pos_similarity = (double)matching_pos / p1.posSeq.size();
         double semantic_sim = AdvancedStatUtils::semanticSimilarity(p1.embedding, p2.embedding);
-        
+
         return (pos_similarity > 0.8 && semantic_sim > 0.7);
     }
-    
+
     map<string, double> calculateSlotFillers(const EnhancedPattern& pattern) {
         map<string, double> fillers;
         return fillers;
     }
-    
-    string sampleWordByPOSAndRole(const string& pos, const string& role, 
+
+    string sampleWordWithMarkov(const string& pos, const string& prev_word) {
+        auto it = pos_to_words.find(pos);
+        if (it == pos_to_words.end() || it->second.empty()) {
+            return sampleByPOS(pos); // Fallback to basic POS sampling
+        }
+
+        if (prev_word.empty()) {
+            return sampleByPOS(pos); // No previous word, fallback to basic POS sampling
+        }
+
+        vector<pair<string, double>> candidates;
+        double total_weight = 0.0;
+
+        string lower_prev = toLower(prev_word);
+
+        for (const string& word : it->second) {
+            string bigram = lower_prev + "\t" + toLower(word);
+
+            double bigram_freq = ngrams.bi.count(bigram) ? ngrams.bi[bigram] : 0.0;
+
+            // If bigram exists, give it high weight. Otherwise, give it small probability based on unigram freq
+            double weight = 0.0;
+            if (bigram_freq > 0) {
+                weight = pow(bigram_freq, 2.0); // Strong preference for observed bigrams
+            } else if (vocab.count(word)) {
+                weight = 0.01 * sqrt(vocab[word].freq); // Tiny fallback probability
+            }
+
+            if (weight > 0) {
+                candidates.emplace_back(word, weight);
+                total_weight += weight;
+            }
+        }
+
+        if (candidates.empty() || total_weight == 0) {
+            return sampleByPOS(pos); // Fallback if no valid candidates found
+        }
+
+        // Weighted random selection
+        double r = ((double)rand() / RAND_MAX) * total_weight;
+        double accum = 0.0;
+
+        for (const auto& candidate : candidates) {
+            accum += candidate.second;
+            if (r <= accum) return candidate.first;
+        }
+
+        return candidates.back().first;
+    }
+
+    string sampleWordByPOSAndRole(const string& pos, const string& role,
                                  const map<string, double>& slot_fillers) {
         return sampleByPOS(pos);
     }
-    
+
        string sampleByPOS(const string& pos) {
         auto it = pos_to_words.find(pos);
-        
+
         // If no words for this POS, use common fallbacks
         if (it == pos_to_words.end() || it->second.empty()) {
             static const unordered_map<string, vector<string>> commonWords = {
@@ -1108,18 +1160,18 @@ void learnPatternsFromSentence(const vector<string>& words, const vector<string>
             {"PROPN", {"John", "Mary", "London", "Paris", "Google", "Microsoft", "Alice", "Bob", "English", "Monday", "January", "Christmas"}},
             {"NUM", {"one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "first", "second", "third", "last", "next"}}
             };
-            
+
             if (commonWords.count(pos)) {
                 const auto& words = commonWords.at(pos);
                 return words[rand() % words.size()];
             }
             return "unknown";
         }
-        
+
         // Weighted sampling from learned vocabulary
         vector<pair<string, double>> candidates;
         double total_weight = 0.0;
-        
+
         for (const string& word : it->second) {
             if (vocab.count(word)) {
                 double weight = vocab[word].freq;
@@ -1129,51 +1181,51 @@ void learnPatternsFromSentence(const vector<string>& words, const vector<string>
                 total_weight += weight;
             }
         }
-        
+
         if (candidates.empty()) {
             // Fallback to first word in the set
             return *it->second.begin();
         }
-        
+
         // Weighted random selection
         double r = ((double)rand() / RAND_MAX) * total_weight;
         double accum = 0.0;
-        
+
         for (const auto& candidate : candidates) {
             accum += candidate.second;
             if (r <= accum) return candidate.first;
         }
-        
+
         return candidates.back().first;
     }
-    
+
     string sampleBySemanticCoherence(const string& pos, const vector<float>& pattern_embedding) {
         auto it = pos_to_words.find(pos);
         if (it == pos_to_words.end()) return "";
-        
+
         string best_word;
         double best_score = -1.0;
-        
+
         for (const string& word : it->second) {
             if (!vocab.count(word)) continue;
-            
+
             vector<float> word_embedding = pos_tagger.getWordEmbedding(word);
             double score = AdvancedStatUtils::semanticSimilarity(word_embedding, pattern_embedding);
-            
+
             if (score > best_score) {
                 best_score = score;
                 best_word = word;
             }
         }
-        
+
         return best_word;
     }
-    
+
     string findBestMatchingPattern(const vector<string>& pos_tags, const vector<string>& roles,
                                   const vector<DependencyParser::Dependency>& deps) {
         string best_pattern;
         double best_score = -1.0;
-        
+
         for (const auto& pattern_entry : patterns) {
             const EnhancedPattern& pattern = pattern_entry.second;
             double score = calculatePatternMatchScore(pos_tags, roles, deps, pattern);
@@ -1182,10 +1234,10 @@ void learnPatternsFromSentence(const vector<string>& words, const vector<string>
                 best_pattern = pattern_entry.first;
             }
         }
-        
+
         return best_score > 0.6 ? best_pattern : "unknown";
     }
-    
+
     double calculatePatternMatchScore(const vector<string>& pos_tags, const vector<string>& roles,
                                     const vector<DependencyParser::Dependency>& deps,
                                     const EnhancedPattern& pattern) {
@@ -1193,10 +1245,10 @@ void learnPatternsFromSentence(const vector<string>& words, const vector<string>
         double role_score = calculateRoleMatchScore(roles, pattern.semanticRoles);
         return (pos_score * 0.7 + role_score * 0.3) * pattern.confidence;
     }
-    
+
     double calculatePOSMatchScore(const vector<string>& sentence_pos, const vector<string>& pattern_pos) {
         vector<vector<int>> dp(sentence_pos.size() + 1, vector<int>(pattern_pos.size() + 1, 0));
-        
+
         for (size_t i = 1; i <= sentence_pos.size(); i++) {
             for (size_t j = 1; j <= pattern_pos.size(); j++) {
                 if (sentence_pos[i-1] == pattern_pos[j-1]) {
@@ -1206,29 +1258,29 @@ void learnPatternsFromSentence(const vector<string>& words, const vector<string>
                 }
             }
         }
-        
+
         return (double)dp[sentence_pos.size()][pattern_pos.size()] / pattern_pos.size();
     }
-    
+
     double calculateRoleMatchScore(const vector<string>& sentence_roles, const vector<string>& pattern_roles) {
         if (pattern_roles.empty()) return 1.0;
-        
+
         int matches = 0;
         for (size_t i = 0; i < min(sentence_roles.size(), pattern_roles.size()); i++) {
             if (pattern_roles[i] == "O" || sentence_roles[i] == pattern_roles[i]) {
                 matches++;
             }
         }
-        
+
         return (double)matches / pattern_roles.size();
     }
-    
+
     void updateNgramsAndVocab(const vector<string>& words, const vector<string>& pos_tags) {
         for (size_t i = 0; i < words.size(); i++) {
             string word = words[i];
-            
+
             ngrams.uni[word]++;
-            
+
             if (!vocab.count(word)) {
                 Token token;
                 token.surface = word;
@@ -1240,25 +1292,25 @@ void learnPatternsFromSentence(const vector<string>& words, const vector<string>
             } else {
                 vocab[word].freq++;
             }
-            
+
             if (i > 0) {
                 string bigram = words[i-1] + "	" + words[i];
                 ngrams.bi[bigram]++;
             }
-            
+
             if (i > 1) {
                 string trigram = words[i-2] + "	" + words[i-1] + "	" + words[i];
                 ngrams.tri[trigram]++;
             }
         }
     }
-    
+
     void computeAdvancedWeights() {
         double total_freq = 0.0;
         for (const auto& entry : vocab) {
             total_freq += entry.second.freq;
         }
-        
+
         for (auto& entry : vocab) {
             Token& token = entry.second;
             double tf = (double)token.freq / total_freq;
@@ -1266,17 +1318,17 @@ void learnPatternsFromSentence(const vector<string>& words, const vector<string>
             token.weight = tf * idf;
         }
     }
-    
+
     string formatSentence(const vector<string>& words) {
     if (words.empty()) return "";
-    
+
     string sentence = join(words, " ");
-    
+
     // Capitalize first letter
     if (!sentence.empty()) {
         sentence[0] = toupper(sentence[0]);
     }
-    
+
     // Add proper ending punctuation
     if (sentence.back() != '.' && sentence.back() != '?' && sentence.back() != '!') {
         // Determine if it's a question
@@ -1285,10 +1337,10 @@ void learnPatternsFromSentence(const vector<string>& words, const vector<string>
         if (!words.empty() && question_words.count(toLower(words[0]))) {
             is_question = true;
         }
-        
+
         sentence += is_question ? "?" : ".";
     }
-    
+
     return sentence;
   }
 };
@@ -1298,23 +1350,23 @@ int main() {
     ios::sync_with_stdio(false);
     cin.tie(nullptr);
     srand(static_cast<unsigned>(time(nullptr)));
-    
+
     EnhancedPatternModel model;
     cout << "=== Advanced PatternLearner v3 ===" << endl;
     cout << "Features: Neural POS tagging, Semantic Role Labeling, Dependency Parsing" << endl;
-    
+
     string line;
     while (true) {
         cout << "\nCommands: read <file>, gen, interp <sentence>, patterns [N], vocab [N], save <path>, load <path>, exit" << endl;
         cout << "> ";
-        
+
         if (!getline(cin, line)) break;
         if (line.empty()) continue;
-        
+
         stringstream ss(line);
         string cmd;
         ss >> cmd;
-        
+
         if (cmd == "exit") break;
         else if (cmd == "read") {
             string file;
@@ -1382,7 +1434,7 @@ int main() {
             cout << "Unknown command: " << cmd << endl;
         }
     }
-    
+
     cout << "Goodbye!" << endl;
     return 0;
 }
